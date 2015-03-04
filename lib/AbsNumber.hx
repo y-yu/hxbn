@@ -1,3 +1,5 @@
+package lib;
+
 enum Number<T> {
 	Num(i : Int) : Number<Int>;
 	Str(s : String) : Number<String>;

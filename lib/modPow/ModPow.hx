@@ -1,4 +1,4 @@
-package modPow;
+package lib.modPow;
 import BigInteger;
 
 interface ModPow {

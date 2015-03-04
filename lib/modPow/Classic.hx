@@ -1,5 +1,5 @@
-package modPow;
-import modPow.ModPow;
+package lib.modPow;
+import lib.modPow.ModPow;
 
 class Classic implements ModPow {
 	private var m : BigInteger;

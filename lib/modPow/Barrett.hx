@@ -1,5 +1,5 @@
-package modPow;
-import modPow.ModPow;
+package lib.modPow;
+import lib.modPow.ModPow;
 
 class Barrett implements ModPow {
 	private var r2 : BigInteger;

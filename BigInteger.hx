@@ -1,9 +1,10 @@
-import modPow.ModPow;
-import modPow.Classic;
-import modPow.Barrett;
-import modPow.Montgomery;
-import AbsNumber;
-import CharArray;
+import lib.modPow.ModPow;
+import lib.modPow.Classic;
+import lib.modPow.Barrett;
+import lib.modPow.Montgomery;
+
+import lib.AbsNumber;
+import lib.CharArray;
 
 @:generic
 class BigInteger {
@@ -18,10 +19,10 @@ class BigInteger {
 	public static inline var DM = ((1<<BigInteger.dbits)-1);
 	public static inline var DV = (1<<BigInteger.dbits);
 
-	public static inline var BI_FP = 52;
-	public static inline var FV = 4503599627370496; // 2^52 -- Math.pow(2,BigInteger.BI_FP);
-	public static inline var F1 = BigInteger.BI_FP-BigInteger.dbits;
-	public static inline var F2 = 2*BigInteger.dbits-BigInteger.BI_FP;
+	public static inline var BI_FP = 30;
+	public static inline var FV = 1073741824; // 2^30 -- Math.pow(2,BigInteger.BI_FP);
+	public static inline var F1 = BigInteger.BI_FP - BigInteger.dbits;
+	public static inline var F2 = 2 * BigInteger.dbits - BigInteger.BI_FP;
 
 	// return new, unset BigInteger
 	public static function nbi()  : BigInteger { return new BigInteger(); }
@@ -75,10 +76,11 @@ class BigInteger {
 	}
 
 	// (public) true iff nth bit is set
-	public inline function testBit(n : Int) {
+	public function testBit(n : Int) {
 		var j = Math.floor(n/BigInteger.DB);
+		trace(j, this.t);
 		if(j >= this.t) return(this.s!=0);
-		return((this.n[j]&(1<<(n%BigInteger.DB)))!=0);
+		return(( this.n[j] & (1 << (n % BigInteger.DB)))!=0);
 	}
 
 	// (protected) clamp off excess high words
@@ -207,7 +209,6 @@ class BigInteger {
 		var cbs = BigInteger.DB-bs;
 		var bm = (1<<cbs)-1;
 		var ds = Math.floor(n/BigInteger.DB), c = (this.s<<bs)&BigInteger.DM, i;
-		trace(-(this.t-1));
 		for(i in -(this.t-1) ... 1) {
 			r.n[-i+ds+1] = (this.n[-i]>>cbs)|c;
 			c = (this.n[-i]&bm)<<bs;
@@ -366,7 +367,7 @@ class BigInteger {
 	}
 
 	// (protected) this *= n, this >= 0, 1 < n < DV
-	public inline function dMultiply(n) {
+	public function dMultiply(n) {
 		this.n[this.t] = this.am(0,n-1,this,0,0,this.t);
 		++this.t;
 		this.clamp();
@@ -403,10 +404,8 @@ class BigInteger {
 		if(r == null) r = nbi();
 		var y = nbi(), ts = this.s, ms = m.s;
 		var nsh = BigInteger.DB-BigInteger.nbits(pm.n[pm.t-1]);	// normalize modulus
-		trace(y.n);
 		if(nsh > 0) {pm.lShiftTo(nsh,y); pt.lShiftTo(nsh,r); }
 		else { pm.copyTo(y); pt.copyTo(r); }
-		trace(y.n);
 		var ys = y.t;
 		var y0 = y.n[ys-1];
 		if(y0 == 0) return;
@@ -502,7 +501,7 @@ class BigInteger {
 
 	// (protected) r = lower n words of "this * a", a.t <= n
 	// "this" should be the larger one if appropriate.
-	public inline function multiplyLowerTo(a : BigInteger, n : Int, r : BigInteger) {
+	public function multiplyLowerTo(a : BigInteger, n : Int, r : BigInteger) {
 		var i = Std.int(Math.min(this.t+a.t,n));
 		r.s = 0; // assumes a,this >= 0
 		r.t = i;
@@ -516,7 +515,7 @@ class BigInteger {
 
 	// (protected) r = "this * a" without lower n words, n > 0
 	// "this" should be the larger one if appropriate.
-	public inline function multiplyUpperTo(a : BigInteger,n : Int, r : BigInteger) {
+	public function multiplyUpperTo(a : BigInteger,n : Int, r : BigInteger) {
 		--n;
 		var i = r.t = this.t+a.t-n;
 		r.s = 0; // assumes a,this >= 0
@@ -528,7 +527,7 @@ class BigInteger {
 	}
 
 	// (public) this mod a
-	public inline function mod(a : BigInteger) {
+	public function mod(a : BigInteger) {
 		var r = nbi();
 		this.abs().divRemTo(a,null,r);
 		if(this.s < 0 && r.compareTo(BigInteger.ZERO) > 0) a.subTo(r,r);
@@ -536,7 +535,7 @@ class BigInteger {
 	}
 
 	// (public) this^e % m, 0 <= e < 2^32
-	public inline function modPowInt(e : Int, m : BigInteger) {
+	public function modPowInt(e : Int, m : BigInteger) {
 		var z : ModPow;
 		if(e < 256 || m.isEven()) z = new Classic(m); else z = new Montgomery(m);
 		return this.exp(e,z);
@@ -659,10 +658,14 @@ class BigInteger {
 		return x.millerRabin(t);
 	}
 
-	public inline function new<T, U> (?a : AbsNumber<T>, ?b : AbsNumber<U>, ?c) {
+	public function new<T, U> (?a_ : AbsNumber<T>, ?b_ : AbsNumber<U>, ?c) {
+		var a : Number<T> = a_;
+		var b : Number<U> = b_;
+
 		if (a != null) {
 			switch (a) {
 				case Num(a) :
+					trace("from Number");
 					this.fromNumber(a, b, c);
 				case Str(a) :
 					this.fromString(a, b);
@@ -673,13 +676,15 @@ class BigInteger {
 	}
 
 	// (protected) alternate constructor
-	private inline function fromNumber<T>(a, b : AbsNumber<T>, ?c = 10) {
+	private function fromNumber<T>(a : Int, b_ : AbsNumber<T>, ?c = 10) {
+		var b : Number<T> = b_;
+
 		switch (b) {
 			case Num(b):
 				// new BigInteger(int,int,RNG)
 				if(a < 2) this.fromInt(1);
 				else {
-					this.fromNumber(a,c);
+					//this.fromNumber(a,c);
 					if(!this.testBit(a-1))	// force MSB set
 						this.bitwiseTo(BigInteger.ONE.shiftLeft(a-1),op_or,this);
 					if(this.isEven()) this.dAddOffset(1,0); // force odd
@@ -688,17 +693,20 @@ class BigInteger {
 						if(this.bitLength() > a) this.subTo(BigInteger.ONE.shiftLeft(a-1),this);
 					}
 				}
-			/*
 			case Str(b): {
-				// new BigInteger(int,RNG)
-				var x : Array<Int>, t = a&7;
-				x.length = (a>>3)+1;
-				b.nextBytes(x);
-				if(t > 0) x[0] &= ((1<<t)-1); else x[0] = 0;
+				// not yet implemented
+				var x : CharArray = "";
+				var t : Int = a & 7;
+
+				// x.length = (a>>3)+1;
+				// b.nextBytes(x);
+				if(t > 0)
+					x[0] = x[0] & ((1<<t)-1);
+				else
+					x[0] = 0;
+
 				this.fromString(x,256);
-			};
-			*/
-			case _ : throw 'error';
+			}
 		}
 	}
 
@@ -738,14 +746,15 @@ class BigInteger {
 		if(mi) BigInteger.ZERO.subTo(this,this);
 	}
 
-	private static inline function intOfString(c : String) : Int {
-		if (c.length == 1 && ("0".charCodeAt(0) <= c.charCodeAt(0) || c.charCodeAt(0) <="9".charCodeAt(0)))
-			return c.charCodeAt(0) - "0".charCodeAt(0);
+	private static function intOfString(c : Int) : Int {
+		if ("0".charCodeAt(0) <= c || c <="9".charCodeAt(0))
+			return c - "0".charCodeAt(0);
 		else
 			return 0;
 	}
 
-	private function fromString<T>(s_ : String, b : AbsNumber<T>) {
+	private function fromString<T>(s_ : String, b_ : AbsNumber<T>) {
+		var b : Number<T> = b_;
 		var s : CharArray = s_;
 		var k;
 		
@@ -759,7 +768,6 @@ class BigInteger {
 				else if(b == 4) k = 2;
 				else { this.fromRadix(s,b); return; };
 			case _:
-				trace(b);
 				throw "Error!";
 		}
 
@@ -767,7 +775,7 @@ class BigInteger {
 		this.s = 0;
 		var i = (!s).length, mi = false, sh = 0;
 		while(--i >= 0) {
-			var x = (k==8) ? intOfString(s[i]) & 0xff : intAt(s,i);
+			var x = (k==8) ? intOfString(s[i]) & 0xff : intAt(s, i);
 			if(x < 0) {
 				if((!s).charAt(i) == "-") mi = true;
 				continue;
@@ -823,8 +831,8 @@ class BigInteger {
 	}
 
 	public static function main () {
-		var x = new BigInteger("256", 10);
+		var x = new BigInteger("2560000000000000000000000", 10);
  
-		trace(x.toString(10));
+		trace(x.toString());
 	}
 }
