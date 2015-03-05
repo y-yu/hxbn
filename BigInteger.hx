@@ -24,6 +24,9 @@ class BigInteger {
 	public static inline var F1 = BigInteger.BI_FP - BigInteger.dbits;
 	public static inline var F2 = 2 * BigInteger.dbits - BigInteger.BI_FP;
 
+	private static var lowprimes = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97,101,103,107,109,113,127,131,137,139,149,151,157,163,167,173,179,181,191,193,197,199,211,223,227,229,233,239,241,251,257,263,269,271,277,281,283,293,307,311,313,317,331,337,347,349,353,359,367,373,379,383,389,397,401,409,419,421,431,433,439,443,449,457,461,463,467,479,487,491,499,503,509,521,523,541,547,557,563,569,571,577,587,593,599,601,607,613,617,619,631,641,643,647,653,659,661,673,677,683,691,701,709,719,727,733,739,743,751,757,761,769,773,787,797,809,811,821,823,827,829,839,853,857,859,863,877,881,883,887,907,911,919,929,937,941,947,953,967,971,977,983,991,997];
+	private static var lplim = (1<<26)/BigInteger.lowprimes[BigInteger.lowprimes.length-1];
+
 	// return new, unset BigInteger
 	public static function nbi()  : BigInteger { return new BigInteger(); }
 
@@ -43,6 +46,14 @@ class BigInteger {
 
 	public static inline function int2char(n : Int) : String { return BI_RM.charAt(n); }
 
+
+	// am: Compute w_j += (x*this_i), propagate carries,
+	// c is initial carry, returns final carry.
+	// c < 3*dvalue, x < 2*dvalue, this_i < dvalue
+	// We need to select the fastest one that works in this environment.
+	//
+	// Alternately, set max digit bits to 28 since some
+	// browsers slow down when dealing with 32-bit numbers.
 	public inline function am (i : Int, x : Int, w : BigInteger, j : Int, c : Int, n : Int) {
 		var xl = x&0x3fff, xh = x>>14;
 		while(--n >= 0) {
@@ -74,6 +85,9 @@ class BigInteger {
 		else if(this.t <= 0 || (this.t == 1 && this.n[0] <= 0)) return 0;
 		else return 1;
 	}
+
+	// (public)
+	public function clone() { var r = nbi(); this.copyTo(r); return r; }
 
 	// (public) true iff nth bit is set
 	public function testBit(n : Int) {
@@ -221,7 +235,7 @@ class BigInteger {
 	}
 
 	// (protected) r = this >> n
-	public inline function rShiftTo(n : Int,r : BigInteger) {
+	public function rShiftTo(n : Int, r : BigInteger) {
 		r.s = this.s;
 		var ds = Math.floor(n/BigInteger.DB);
 		if(ds >= this.t) { r.t = 0; return; }
@@ -541,9 +555,6 @@ class BigInteger {
 		return this.exp(e,z);
 	}
 
-	private static var lowprimes = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97,101,103,107,109,113,127,131,137,139,149,151,157,163,167,173,179,181,191,193,197,199,211,223,227,229,233,239,241,251,257,263,269,271,277,281,283,293,307,311,313,317,331,337,347,349,353,359,367,373,379,383,389,397,401,409,419,421,431,433,439,443,449,457,461,463,467,479,487,491,499,503,509,521,523,541,547,557,563,569,571,577,587,593,599,601,607,613,617,619,631,641,643,647,653,659,661,673,677,683,691,701,709,719,727,733,739,743,751,757,761,769,773,787,797,809,811,821,823,827,829,839,853,857,859,863,877,881,883,887,907,911,919,929,937,941,947,953,967,971,977,983,991,997];
-	private static var lplim = (1<<26)/BigInteger.lowprimes[BigInteger.lowprimes.length-1];
-
 	// (public) this^e % m (HAC 14.85)
 	public function modPow(e : BigInteger, m : BigInteger) {
 		var i = e.bitLength(), k, r = nbv(1);
@@ -658,54 +669,74 @@ class BigInteger {
 		return x.millerRabin(t);
 	}
 
-	public function new<T, U> (?a_ : AbsNumber<T>, ?b_ : AbsNumber<U>, ?c) {
-		var a : Number<T> = a_;
-		var b : Number<U> = b_;
+	// (public) 1/this % m (HAC 14.61)
+	public function modInverse(m : BigInteger) {
+		var ac = m.isEven();
+		if((this.isEven() && ac) || m.signum() == 0) return BigInteger.ZERO;
+		var u = m.clone();
+		var v = this.clone();
+		var a = nbv(1), b = nbv(0), c = nbv(0), d = nbv(1);
+		while(u.signum() != 0) {
+			while(u.isEven()) {
+				u.rShiftTo(1,u);
+				if(ac) {
+					if(!a.isEven() || !b.isEven()) { a.addTo(this,a); b.subTo(m,b); }
+					a.rShiftTo(1,a);
+				}
+				else if(!b.isEven()) b.subTo(m,b);
+				b.rShiftTo(1,b);
+			}
+			while(v.isEven()) {
+				v.rShiftTo(1,v);
+				if(ac) {
+					if(!c.isEven() || !d.isEven()) { c.addTo(this,c); d.subTo(m,d); }
+					c.rShiftTo(1,c);
+				}
+				else if(!d.isEven()) d.subTo(m,d);
+				d.rShiftTo(1,d);
+			}
+			if(u.compareTo(v) >= 0) {
+				u.subTo(v,u);
+				if(ac) a.subTo(c,a);
+				b.subTo(d,b);
+			}
+			else {
+				v.subTo(u,v);
+				if(ac) c.subTo(a,c);
+				d.subTo(b,d);
+			}
+		}
+		if(v.compareTo(BigInteger.ONE) != 0) return BigInteger.ZERO;
+		if(d.compareTo(m) >= 0) return d.subtract(m);
+		if(d.signum() < 0) d.addTo(m,d); else return d;
+		if(d.signum() < 0) return d.add(m); else return d;
+	}
 
+	public function new<T> (?a_ : Null<AbsNumber<T>>, ?b : Int = 10, ?c) {
+		var a : Null<Number<T>> = a_;
+		
 		if (a != null) {
 			switch (a) {
 				case Num(a) :
-					trace("from Number");
 					this.fromNumber(a, b, c);
 				case Str(a) :
 					this.fromString(a, b);
-				case _ :
-					throw 'BigInt is not allowed!';
 			}
 		}
 	}
 
 	// (protected) alternate constructor
-	private function fromNumber<T>(a : Int, b_ : AbsNumber<T>, ?c = 10) {
-		var b : Number<T> = b_;
-
-		switch (b) {
-			case Num(b):
-				// new BigInteger(int,int,RNG)
-				if(a < 2) this.fromInt(1);
-				else {
-					//this.fromNumber(a,c);
-					if(!this.testBit(a-1))	// force MSB set
-						this.bitwiseTo(BigInteger.ONE.shiftLeft(a-1),op_or,this);
-					if(this.isEven()) this.dAddOffset(1,0); // force odd
-					while(!this.isProbablePrime(b)) {
-						this.dAddOffset(2,0);
-						if(this.bitLength() > a) this.subTo(BigInteger.ONE.shiftLeft(a-1),this);
-					}
-				}
-			case Str(b): {
-				// not yet implemented
-				var x : CharArray = "";
-				var t : Int = a & 7;
-
-				// x.length = (a>>3)+1;
-				// b.nextBytes(x);
-				if(t > 0)
-					x[0] = x[0] & ((1<<t)-1);
-				else
-					x[0] = 0;
-
-				this.fromString(x,256);
+	private function fromNumber<T>(a : Int, b : Int, ?c = 10) {
+		// new BigInteger(int,int,RNG)
+		if(a < 2) this.fromInt(1);
+		else {
+			//this.fromNumber(a,c);
+			if(!this.testBit(a-1))	// force MSB set
+				this.bitwiseTo(BigInteger.ONE.shiftLeft(a-1),op_or,this);
+			if(this.isEven()) this.dAddOffset(1,0); // force odd
+			while(!this.isProbablePrime(b)) {
+				this.dAddOffset(2,0);
+				if(this.bitLength() > a) this.subTo(BigInteger.ONE.shiftLeft(a-1),this);
 			}
 		}
 	}
@@ -831,8 +862,9 @@ class BigInteger {
 	}
 
 	public static function main () {
-		var x = new BigInteger("2560000000000000000000000", 10);
+		var x = new BigInteger("3", 10);
+		var y = new BigInteger("11");
  
-		trace(x.toString());
+		trace(x.modInverse(y).toString());
 	}
 }
